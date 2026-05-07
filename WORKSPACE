@@ -227,3 +227,8 @@ local_repository(
     name = "synthesis_internal",
     path = "../synthesis_internal",
 )
+
+local_repository(
+    name = "netlist_test",
+    path = "internal/netlist_test",
+)
