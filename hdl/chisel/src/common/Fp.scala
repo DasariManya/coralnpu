@@ -53,6 +53,37 @@ class Fp32 extends Bundle {
   }
 }
 
+class Bf16 extends Bundle {
+  val mantissa = UInt(7.W)
+  val exponent = UInt(8.W)
+  val sign     = Bool()
+
+  def asWord: UInt = {
+    Cat(sign, exponent, mantissa)
+  }
+}
+
+object Bf16 {
+  def apply(sign: Bool, exponent: UInt, mantissa: UInt): Bf16 = {
+    assert(exponent.getWidth == 8)
+    assert(mantissa.getWidth == 7)
+    val fp = Wire(new Bf16)
+    fp.mantissa := mantissa
+    fp.exponent := exponent
+    fp.sign := sign
+    fp
+  }
+
+  def fromWord(word: UInt): Bf16 = {
+    assert(word.getWidth == 16)
+    val fp = Wire(new Bf16)
+    fp.mantissa := word(6, 0)
+    fp.exponent := word(14, 7)
+    fp.sign := word(15)
+    fp
+  }
+}
+
 object Fp32 {
   def apply(sign: Bool, exponent: UInt, mantissa: UInt): Fp32 = {
     assert(exponent.getWidth == 8)

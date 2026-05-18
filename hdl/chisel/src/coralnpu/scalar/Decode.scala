@@ -925,7 +925,7 @@ object DecodeInstruction {
 
 
     if (p.enableFloat) {
-      val float = FloatInstruction.decode(op, addr)
+      val float = FloatInstruction.decode(p, op, addr)
       val floatValid = float.valid && float.bits.validate_csrfrm(csrFrm)
       d.float.get := MakeValid(floatValid, float.bits)
     }

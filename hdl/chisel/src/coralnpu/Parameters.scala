@@ -84,6 +84,7 @@ class Parameters(var m: Seq[MemoryRegion] = Seq(), val hartId: Int = 0) {
 
   // Scalar Floating point
   var enableFloat = false
+  var enableZfbfmin = false
   // Use the Div/Sqrt module from PULP instead of E906.
   // It is smaller, but has small rounding errors.
   val floatPulpDivsqrt = 0

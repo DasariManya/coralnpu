@@ -70,7 +70,8 @@ object FpNewRoundingMode extends ChiselEnum {
 
 object GenerateCoreShimSource {
     def apply(p: Parameters): String = {
-        var moduleInterface = """module FloatCoreWrapper(
+        var moduleInterface = """
+        |module FloatCoreWrapper(
         |  input logic clk_i,
         |  input logic rst_ni,
         |""".stripMargin
@@ -85,6 +86,8 @@ object GenerateCoreShimSource {
         moduleInterface += "  input logic[OP_BITS-1:0] op_i,\n".replaceAll("OP_BITS", FpNewConfig.OP_BITS.toString)
         moduleInterface += "  input logic op_mod_i,\n"
         moduleInterface += "  input logic[2:0] rnd_mode_i,\n"
+        moduleInterface += "  input logic[2:0] src_fmt_i,\n"
+        moduleInterface += "  input logic[2:0] dst_fmt_i,\n"
         moduleInterface += "  input logic flush_i,\n"
         moduleInterface += "  output logic out_valid_o,\n"
         moduleInterface += "  input logic out_ready_i,\n"
@@ -120,7 +123,7 @@ object GenerateCoreShimSource {
         |""".stripMargin
 
         coreInstantiation += """  fpnew_top#(
-        |      .Features(fpnew_pkg::RV32F),
+        |      .Features(FEATURES),
         |      .Implementation(impl),
         |      .DivSqrtSel(DIVSQRT_SEL)
         |    ) core(
@@ -130,8 +133,8 @@ object GenerateCoreShimSource {
         |    .rnd_mode_i(fpnew_pkg::roundmode_e'(rnd_mode_i)),
         |    .op_i(fpnew_pkg::operation_e'(op_i)),
         |    .op_mod_i(op_mod_i),
-        |    .src_fmt_i(fpnew_pkg::FP32),
-        |    .dst_fmt_i(fpnew_pkg::FP32),
+        |    .src_fmt_i(fpnew_pkg::fp_format_e'(src_fmt_i)),
+        |    .dst_fmt_i(fpnew_pkg::fp_format_e'(dst_fmt_i)),
         |    .int_fmt_i(fpnew_pkg::INT32),
         |    .vectorial_op_i(1'b0),
         |    .tag_i(1'b0),
@@ -147,7 +150,14 @@ object GenerateCoreShimSource {
         |    .busy_o(busy_o),
         |    .early_valid_o(early_valid_o)
         |  );
-        |""".replaceAll("DIVSQRT_SEL", if (p.floatPulpDivsqrt != 0) "fpnew_pkg::PULP" else "fpnew_pkg::TH32").stripMargin
+        |""".replaceAll("DIVSQRT_SEL", if (p.floatPulpDivsqrt != 0 || p.enableZfbfmin) "fpnew_pkg::PULP" else "fpnew_pkg::TH32")
+            .replaceAll("FEATURES", if (p.enableZfbfmin) """'{
+        |  Width:         32,
+        |  EnableVectors: 1'b0,
+        |  EnableNanBox:  1'b1,
+        |  FpFmtMask:     5'b10001,
+        |  IntFmtMask:    4'b0010
+        |}""" else "fpnew_pkg::RV32F").stripMargin
 
         moduleInterface + coreInstantiation + "endmodule\n"
     }
@@ -164,6 +174,8 @@ class FloatCoreWrapper(p: Parameters) extends BlackBox with HasBlackBoxInline
         val op_i = Input(UInt(FpNewConfig.OP_BITS.W))
         val op_mod_i = Input(Bool())
         val rnd_mode_i = Input(UInt(3.W))
+        val src_fmt_i = Input(UInt(3.W))
+        val dst_fmt_i = Input(UInt(3.W))
         val flush_i = Input(Bool())
 
         val out_valid_o = Output(Bool())
@@ -180,7 +192,7 @@ class FloatCoreWrapper(p: Parameters) extends BlackBox with HasBlackBoxInline
     addResource("external/cvfpu/src/fpnew_pkg.sv")
     addResource("external/cvfpu/src/fpnew_cast_multi.sv")
     addResource("external/cvfpu/src/fpnew_classifier.sv")
-    if (p.floatPulpDivsqrt == 0) {
+    if (p.floatPulpDivsqrt == 0 && !p.enableZfbfmin) {
         addResource("external/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/clk/rtl/gated_clk_cell.v")
         addResource("external/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/fdsu/rtl/pa_fdsu_ctrl.v")
         addResource("external/cvfpu/vendor/opene906/E906_RTL_FACTORY/gen_rtl/fdsu/rtl/pa_fdsu_ff1.v")
@@ -244,6 +256,7 @@ class FloatCore(p: Parameters) extends Module {
         "b10100".U -> FpNewOperation.CMP,
         "b11100".U -> FpNewOperation.CLASSIFY,
         "b11010".U -> FpNewOperation.I2F,
+        "b01000".U -> FpNewOperation.F2F,
     ))
     val opfp_mod = MuxLookup(inst.bits.funct5, 0.U(1.W))(Seq(
         "b00000".U -> 0.U(1.W), // ADD
@@ -276,7 +289,7 @@ class FloatCore(p: Parameters) extends Module {
     val read_port_1_valid = op_i.isOneOf(FpNewOperation.FMADD, FpNewOperation.FNMSUB) ||
     (
         inst.bits.opcode === FloatOpcode.OPFP &&
-        !opfp_operation.isOneOf(FpNewOperation.SQRT, FpNewOperation.CLASSIFY, FpNewOperation.F2I, FpNewOperation.I2F)
+        !opfp_operation.isOneOf(FpNewOperation.SQRT, FpNewOperation.CLASSIFY, FpNewOperation.F2I, FpNewOperation.I2F, FpNewOperation.F2F)
     )
     val read_port_2_valid = op_i.isOneOf(FpNewOperation.FMADD, FpNewOperation.FNMSUB) ||
                             (inst.bits.opcode === FloatOpcode.OPFP && opfp_operation === FpNewOperation.ADD)
@@ -311,6 +324,8 @@ class FloatCore(p: Parameters) extends Module {
 
     floatCoreWrapper.io.op_i := op_i.asUInt
     floatCoreWrapper.io.op_mod_i := op_mod_i
+    floatCoreWrapper.io.src_fmt_i := inst.bits.src_fmt.asUInt
+    floatCoreWrapper.io.dst_fmt_i := inst.bits.dst_fmt.asUInt
     val (inst_rm, inst_rm_valid) = FpNewRoundingMode.safe(inst.bits.rm)
     val (csr_rm, csr_rm_valid) = FpNewRoundingMode.safe(io.csr.out.frm)
     val rnd_mode = MuxCase(MakeValid(false.B, inst_rm), Seq(

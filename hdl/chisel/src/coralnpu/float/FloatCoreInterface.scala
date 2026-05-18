@@ -28,6 +28,11 @@ class CsrFloatIO(p: Parameters) extends Bundle {
   })
 }
 
+object FpFormat extends ChiselEnum {
+    val FP32 = Value(0.U(3.W))
+    val FP16ALT = Value(4.U(3.W))
+}
+
 // Bits (6,2) from the instruction
 object FloatOpcode extends ChiselEnum {
     val LOADFP = Value
@@ -42,6 +47,8 @@ object FloatOpcode extends ChiselEnum {
 class FloatInstruction extends Bundle {
     val opcode = FloatOpcode()
     val funct5 = UInt(5.W)
+    val src_fmt = FpFormat()
+    val dst_fmt = FpFormat()
     val rs3 = UInt(5.W)
     val rs2 = UInt(5.W)
     val rs1 = UInt(5.W)
@@ -83,9 +90,9 @@ class FloatInstruction extends Bundle {
 }
 
 object FloatInstruction {
-  def decode(inst: UInt, addr: UInt): Valid[FloatInstruction] = {
+  def decode(p: Parameters, inst: UInt, addr: UInt): Valid[FloatInstruction] = {
     val in_opcode = inst(6,2)
-    // `fmt` is always 0 for FP32
+    // `fmt` is always 0 for FP32, 2 is for BF16 (if Zfbfmin is enabled)
     val fmt = inst(26,25)
     val funct5 = inst(31,27)
     val rs3 = inst(31,27)
@@ -106,6 +113,10 @@ object FloatInstruction {
         "b10010".U -> MakeValid(FloatOpcode.NMSUB),
         "b10011".U -> MakeValid(FloatOpcode.NMADD),
     ))
+
+    val fcvt_s_bf16 = (funct5 === "b01000".U) && (rs2 === "b01000".U) && (fmt === 2.U)
+    val fcvt_bf16_s = (funct5 === "b01000".U) && (rs2 === "b01001".U) && (fmt === 2.U)
+    val is_zfbfmin = (fcvt_s_bf16 || fcvt_bf16_s) && p.enableZfbfmin.B
 
     // TODO(atv): Hook scalar_rd and scalar_rs1 into scalar scoreboard
     // TODO(atv): FMV and FCLASS match the same... do we need to check RM too?
@@ -129,16 +140,22 @@ object FloatInstruction {
       "b11110".U -> false.B, // FMV.W.X
       "b11010".U -> false.B, // FCVT.S.W
       "b01011".U -> false.B, // FSQRT.W
+      "b01000".U -> false.B, // FCVT.S.BF16 / FCVT.BF16.S
     )))
     // All float instructions EXCEPT loads, stores, fmv.w.x, and fcvt.s.w, use float rs1.
     val float_rs1 = !opcode.bits.isOneOf(FloatOpcode.STOREFP, FloatOpcode.LOADFP) && !scalar_rs1
 
+    val src_fmt = Mux(fcvt_bf16_s, FpFormat.FP32, Mux(fcvt_s_bf16, FpFormat.FP16ALT, FpFormat.FP32))
+    val dst_fmt = Mux(fcvt_bf16_s, FpFormat.FP16ALT, Mux(fcvt_s_bf16, FpFormat.FP32, FpFormat.FP32))
+
     MakeWireBundle[ValidIO[FloatInstruction]](
       Valid(new FloatInstruction),
-      // Non-load/store must have fmt == 2
-      _.valid -> (opcode.valid && (opcode.bits === FloatOpcode.LOADFP || opcode.bits === FloatOpcode.STOREFP || (fmt === 0.U(2.W)))),
+      // Non-load/store must have fmt == 0 (FP32) or fmt == 2 (BF16, if Zfbfmin is enabled)
+      _.valid -> (opcode.valid && (opcode.bits === FloatOpcode.LOADFP || opcode.bits === FloatOpcode.STOREFP || (fmt === 0.U(2.W)) || is_zfbfmin)),
       _.bits.opcode -> opcode.bits,
       _.bits.funct5 -> funct5,
+      _.bits.src_fmt -> src_fmt,
+      _.bits.dst_fmt -> dst_fmt,
       _.bits.rs3 -> rs3,
       _.bits.rs2 -> rs2,
       _.bits.rs1 -> rs1,

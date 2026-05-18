@@ -106,6 +106,8 @@ object EmitCore extends App {
       p.enableRvv = arg.split("=")(1).toBoolean
     } else if (arg.startsWith("--enableFloat")) {
       p.enableFloat = arg.split("=")(1).toBoolean
+    } else if (arg.startsWith("--enableZfbfmin")) {
+      p.enableZfbfmin = arg.split("=")(1).toBoolean
     } else if (arg.startsWith("--enableVerification")) {
       p.enableVerification = arg.split("=")(1).toBoolean
     } else if (arg.startsWith("--lsuDataBits")) {

@@ -437,6 +437,8 @@ CORE_MINI_AXI_VOPTS = [
     "-Wno-WIDTHEXPAND",
     "-Wno-WIDTHTRUNC",
     "-Wno-UNSIGNED",
+    "-Wno-BLKANDNBLK",
+    "-Wno-BLKSEQ",
 ]
 
 template_rule(
@@ -452,6 +454,7 @@ template_rule(
                 "--fetchDataBits=128",
                 "--lsuDataBits=128",
                 "--enableFloat=True",
+                "--enableZfbfmin=True",
                 "--moduleName=CoreMini",
                 "--useAxi",
             ],
@@ -468,6 +471,7 @@ template_rule(
                 "--fetchDataBits=128",
                 "--lsuDataBits=128",
                 "--enableFloat=True",
+                "--enableZfbfmin=True",
                 "--moduleName=CoreMiniVerification",
                 "--useAxi",
                 "--enableVerification=True",
@@ -494,6 +498,7 @@ chisel_cc_library(
         "--fetchDataBits=128",
         "--lsuDataBits=128",
         "--enableFloat=True",
+        "--enableZfbfmin=True",
         "--moduleName=CoreMini",
         "--useAxi",
         "--itcmSizeKBytes=1024",
@@ -516,6 +521,7 @@ chisel_cc_library(
         "--fetchDataBits=128",
         "--lsuDataBits=128",
         "--enableFloat=True",
+        "--enableZfbfmin=True",
         "--moduleName=CoreMini",
         "--useAxi",
         "--itcmSizeKBytes=512",
@@ -574,6 +580,7 @@ RVV_CORE_MINI_AXI_COMMON_GEN_FLAGS = [
     "--lsuDataBits=128",
     "--enableRvv=True",
     "--enableFloat=True",
+    "--enableZfbfmin=True",
     "--useAxi",
 ]
 
