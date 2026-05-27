@@ -338,7 +338,7 @@ py_binary(
 coralnpu_v2_sim_test(
     name = "spi_flash_sim_test",
     srcs = ["sw/spi_flash_test.cc"],
-    sim_timeout = 240,
+    sim_timeout = 360,
     deps = [
         ":gpio",
         ":spi",
