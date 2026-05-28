@@ -50,6 +50,7 @@ object CsrAddress extends ChiselEnum {
   val VXSAT     = Value(0x009.U(12.W))
   val VXRM      = Value(0x00A.U(12.W))
   val MSTATUS   = Value(0x300.U(12.W))
+  val MSTATUSH  = Value(0x310.U(12.W))
   val MISA      = Value(0x301.U(12.W))
   val MIE       = Value(0x304.U(12.W))
   val MTVEC     = Value(0x305.U(12.W))
@@ -325,6 +326,7 @@ class Csr(p: Parameters) extends Module {
   val vxrmEn      = Option.when(p.enableRvv) { csr_address === CsrAddress.VXRM }
   val vxsatEn     = Option.when(p.enableRvv) { csr_address === CsrAddress.VXSAT }
   val mstatusEn   = csr_address === CsrAddress.MSTATUS
+  val mstatushEn  = csr_address === CsrAddress.MSTATUSH
   val misaEn      = csr_address === CsrAddress.MISA
   val mieEn       = csr_address === CsrAddress.MIE
   val mtvecEn     = csr_address === CsrAddress.MTVEC
@@ -400,6 +402,7 @@ class Csr(p: Parameters) extends Module {
       frmEn       -> Cat(0.U(29.W), frm),
       fcsrEn      -> Cat(0.U(24.W), fcsr),
       mstatusEn   -> Cat(0.U(17.W), fs, 3.U(2.W), vs, 0.U(1.W), mstatus_mpie, 0.U(3.W), mstatus_mie, 0.U(3.W)),
+      mstatushEn  -> 0.U(32.W),
       misaEn      -> misa,
       mieEn       -> mie,
       mipEn       -> Cat(0.U(20.W), io.irq, 0.U(3.W), io.timer_irq, 0.U(3.W), io.software_irq, 0.U(3.W)),
@@ -468,6 +471,7 @@ class Csr(p: Parameters) extends Module {
     when (fcsrEn)       { fflags    := wdata(4,0)
                           frm       := wdata(7,5) }
     when (mstatusEn)    { mstatus_mie := wdata(3); mstatus_mpie := wdata(7) }
+    when (mstatushEn)   { /* Writes to mstatush are ignored (hardwired zero) */ }
     when (mieEn)        { mie       := wdata & "h888".U }
     when (mtvecEn)      { mtvec     := wdata }
     when (mscratchEn)   { mscratch  := wdata }
